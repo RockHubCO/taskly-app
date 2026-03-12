@@ -4,4 +4,7 @@ export default defineConfig({
   datasource: {
     url: "file:./dev.db",
   },
+  migrations: {
+    seed: 'tsx prisma/seed.ts',
+  },
 });
