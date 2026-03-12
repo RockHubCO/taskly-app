@@ -82,3 +82,21 @@ export async function processMemoryUpdates(
     }
   }
 }
+
+// Formata memórias para injetar no prompt do Claude
+export function formatMemoriesForPrompt(memories: any[]): string {
+  if (memories.length === 0) return "(nenhuma memória registrada)";
+
+  return memories
+    .sort((a, b) => {
+      // Correções primeiro, depois por confidence
+      if (a.category === "CORRECTION" && b.category !== "CORRECTION") return -1;
+      if (b.category === "CORRECTION" && a.category !== "CORRECTION") return 1;
+      return b.confidence - a.confidence;
+    })
+    .map((m) => {
+      const prefix = m.category === "CORRECTION" ? "⚠️ CORREÇÃO: " : "";
+      return `${prefix}[${m.key}]: ${JSON.stringify(m.value)}`;
+    })
+    .join("\n");
+}

@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { buildSystemPrompt } from "@/lib/prompt-builder";
 import { processMemoryUpdates, MemoryUpdate } from "@/lib/memory-manager";
@@ -9,10 +9,9 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const userId = session.user.id;
-  const userName = session.user.name || "Usuário";
 
   const { conversationId, message } = await req.json();
+  const userId = session.user.id;
 
   // 1. Buscar contexto
   const [conversation, userMemories, orgMemories] = await Promise.all([
@@ -47,29 +46,29 @@ export async function POST(req: Request) {
     orgMemories,
     conversationHistory: conversation.messages,
     currentDate: new Date().toISOString().split("T")[0],
-    userName,
+    userName: session.user.name || "Usuário",
   });
 
-  // 4. Montar histórico para Gemini
-  // Gemini uses 'user' and 'model'
-  const contents = [
+  // 4. Montar histórico para Claude
+  const messages: Anthropic.MessageParam[] = [
     ...conversation.messages.map((m) => ({
-      role: m.role === "USER" ? "user" : "model",
-      parts: [{ text: m.content }],
+      role: m.role.toLowerCase() as "user" | "assistant",
+      content: m.content as string,
     })),
-    { role: "user", parts: [{ text: message }] },
+    { role: "user" as const, content: message },
   ];
 
   // 5. Stream da resposta
-  const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+  const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY, 
+  });
 
-  const stream = await ai.models.generateContentStream({
-    model: "gemini-3.1-pro-preview", // Using Gemini 3.1 Pro as requested by environment
-    contents: contents as any,
-    config: {
-      systemInstruction: systemPrompt,
-      maxOutputTokens: 4096,
-    }
+  const stream = await anthropic.messages.create({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 4096,
+    system: systemPrompt,
+    messages,
+    stream: true,
   });
 
   // 6. Retornar como SSE
@@ -80,8 +79,8 @@ export async function POST(req: Request) {
     async start(controller) {
       try {
         for await (const chunk of stream) {
-          const text = chunk.text;
-          if (text) {
+          if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+            const text = chunk.delta.text;
             fullResponse += text;
             controller.enqueue(
               encoder.encode(`event: token\ndata: ${JSON.stringify({ content: text })}\n\n`)
@@ -158,19 +157,40 @@ function extractMemorySignals(content: string) {
 }
 
 async function extractAndSaveTask(conversationId: string, userId: string, content: string) {
-  // Simple extraction logic for the task
-  const titleMatch = content.match(/📌 TÍTULO:\s*(.+)/);
-  const assigneeMatch = content.match(/👤 RESPONSÁVEL:\s*(.+)/);
-  
-  await prisma.generatedTask.create({
-    data: {
-      conversationId,
-      userId,
-      title: titleMatch ? titleMatch[1].trim() : "Nova Tarefa",
-      description: content,
-      assignee: assigneeMatch ? assigneeMatch[1].trim() : null,
-      status: "CONFIRMED",
-      confirmedAt: new Date(),
+  try {
+    const titleMatch = content.match(/📌 TÍTULO:\s*\n?([\s\S]*?)\s*\n📝/);
+    const descMatch = content.match(/📝 DESCRIÇÃO:\s*\n?([\s\S]*?)\s*\n👤/);
+    
+    let assigneeMatch = content.match(/👤 RESPONSÁVEL:\s*(.*?)\s*\n/);
+    if (!assigneeMatch) assigneeMatch = content.match(/👤 RESPONSÁVEL:\s*(.*)/); // Fallback
+    
+    const dueDateMatch = content.match(/📅 DATA DE ENTREGA:\s*(.*?)\s*\n/);
+    const priorityMatch = content.match(/🔴🟡🟢 PRIORIDADE:\s*(Alta|Média|Baixa)/i);
+    const projectMatch = content.match(/📁 PROJETO:\s*(.*?)\s*\n/);
+
+    let priority: 'HIGH' | 'MEDIUM' | 'LOW' = 'MEDIUM';
+    if (priorityMatch) {
+      const p = priorityMatch[1].toLowerCase();
+      if (p === 'alta') priority = 'HIGH';
+      if (p === 'baixa') priority = 'LOW';
     }
-  });
+
+    let title = titleMatch ? titleMatch[1].trim() : ("Nova Tarefa " + Date.now().toString().slice(-4));
+
+    await prisma.generatedTask.create({
+      data: {
+        conversationId,
+        userId,
+        title,
+        description: descMatch ? descMatch[1].trim() : "",
+        assignee: assigneeMatch ? assigneeMatch[1].trim() : null,
+        dueDate: dueDateMatch ? new Date(dueDateMatch[1].trim()) : null,
+        priority: priority,
+        project: projectMatch ? projectMatch[1].trim() : null,
+        status: "DRAFT"
+      }
+    });
+  } catch(e) {
+    console.error("Erro extraindo tarefa", e);
+  }
 }
