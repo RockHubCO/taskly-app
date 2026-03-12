@@ -50,7 +50,10 @@ export default function ChatInterface({
         body: JSON.stringify({ conversationId, message: userMessage.content }),
       });
 
-      if (!response.ok) throw new Error("Failed to send message");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to send message");
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();

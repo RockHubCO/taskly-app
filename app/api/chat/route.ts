@@ -5,12 +5,13 @@ import { processMemoryUpdates, MemoryUpdate } from "@/lib/memory-manager";
 import { auth } from "@/auth";
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const { conversationId, message } = await req.json();
+    const { conversationId, message } = await req.json();
   const userId = session.user.id;
 
   // 1. Buscar contexto
@@ -135,6 +136,10 @@ export async function POST(req: Request) {
       Connection: "keep-alive",
     },
   });
+  } catch (error: any) {
+    console.error("API Chat Error:", error);
+    return Response.json({ error: error.message || String(error) }, { status: 500 });
+  }
 }
 
 // Extrai blocos %%MEMORY_UPDATE%% da resposta
