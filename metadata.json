@@ -1,0 +1,5 @@
+{
+  "name": "TaskForge V1",
+  "description": "Assistente de Criação de Tarefas Asana com memória persistente e fluxo de confirmação.",
+  "requestFramePermissions": []
+}
