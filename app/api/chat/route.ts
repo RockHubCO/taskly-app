@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { getActiveProvider, createAIStream } from "@/lib/ai-provider";
 import { prisma } from "@/lib/prisma";
 import { buildSystemPrompt } from "@/lib/prompt-builder";
 import { processMemoryUpdates, MemoryUpdate } from "@/lib/memory-manager";
@@ -21,10 +21,11 @@ export async function POST(req: Request) {
     }
 
     // Validar API Key
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.error("ANTHROPIC_API_KEY não configurada");
+    const provider = getActiveProvider();
+    if (!provider) {
+      console.error("Nenhuma chave de API configurada (Anthropic ou Gemini)");
       return Response.json(
-        { error: "Configuração do servidor incompleta. Contate o administrador." },
+        { error: "Configuração de IA incompleta no servidor. Contate o administrador." },
         { status: 503 }
       );
     }
@@ -94,8 +95,8 @@ export async function POST(req: Request) {
       userName: session.user.name || "Usuário",
     });
 
-    // 4. Montar histórico para Claude
-    const claudeMessages: Anthropic.MessageParam[] = [
+    // 4. Montar histórico
+    const aiMessages = [
       ...orderedMessages.map((m) => ({
         role: m.role.toLowerCase() as "user" | "assistant",
         content: m.content as string,
@@ -103,18 +104,8 @@ export async function POST(req: Request) {
       { role: "user" as const, content: message },
     ];
 
-    // 5. Stream da resposta
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
-    const stream = await anthropic.messages.create({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: claudeMessages,
-      stream: true,
-    });
+    // 5. Stream da resposta via provider unificado
+    const stream = createAIStream(provider, systemPrompt, aiMessages);
 
     // 6. Retornar como SSE (com abort signal)
     const encoder = new TextEncoder();
@@ -129,13 +120,11 @@ export async function POST(req: Request) {
               controller.close();
               return;
             }
-            if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-              const text = chunk.delta.text;
-              fullResponse += text;
-              controller.enqueue(
-                encoder.encode(`event: token\ndata: ${JSON.stringify({ content: text })}\n\n`)
-              );
-            }
+            const text = chunk.text;
+            fullResponse += text;
+            controller.enqueue(
+              encoder.encode(`event: token\ndata: ${JSON.stringify({ content: text })}\n\n`)
+            );
           }
 
           // 7. Extrair e processar memory signals
