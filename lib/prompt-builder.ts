@@ -136,6 +136,20 @@ Quando CONFIRMADO pelo usuário, gere EXATAMENTE neste formato:
 "[texto, se aplicável]"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Além do formato visual acima, SEMPRE inclua também um bloco JSON estruturado
+delimitado por %%TASK_DATA%% para processamento automático:
+
+%%TASK_DATA%%
+{
+  "title": "...",
+  "description": "...",
+  "assignee": "...",
+  "dueDate": "YYYY-MM-DD",
+  "priority": "HIGH|MEDIUM|LOW",
+  "project": "..."
+}
+%%TASK_DATA%%
 </output_format>
 
 <commands>

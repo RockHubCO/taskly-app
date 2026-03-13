@@ -100,6 +100,8 @@ export default function ChatInterface({
       }
     } catch (error) {
       console.error(error);
+      // Remover mensagem otimista e assistente vazio em caso de erro
+      setMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
     } finally {
       setIsLoading(false);
     }

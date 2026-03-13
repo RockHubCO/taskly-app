@@ -13,8 +13,8 @@ const prisma = new PrismaClient({ adapter })
 async function main() {
   console.log('🌱 Starting database seeding...')
   
-  // 1. Create a default admin/test user
-  const adminEmail = 'admin@taskly.com'
+  // 1. Create a default admin user
+  const adminEmail = 'admin@taskforge.dev'
   const existingUser = await prisma.user.findUnique({
     where: { email: adminEmail }
   })
@@ -22,19 +22,19 @@ async function main() {
   let user
   
   if (!existingUser) {
-    const hashedPassword = await bcrypt.hash('taskly123', 10)
+    const hashedPassword = await bcrypt.hash('taskforge123', 10)
     user = await prisma.user.create({
       data: {
-        name: 'Taskly Admin',
+        name: 'TaskForge Admin',
         email: adminEmail,
         passwordHash: hashedPassword,
         role: 'ADMIN',
       }
     })
-    console.log(`✅ Created test user: ${user.email}`)
+    console.log(`✅ Created admin user: ${user.email}`)
   } else {
     user = existingUser
-    console.log(`ℹ️ Test user already exists: ${user.email}`)
+    console.log(`ℹ️ Admin user already exists: ${user.email}`)
   }
 
   // 2. Create an initial conversation template if doesn't exist
@@ -46,11 +46,11 @@ async function main() {
     const conversation = await prisma.conversation.create({
       data: {
         userId: user.id,
-        title: 'Bem-vindo ao Taskly Assistant',
+        title: 'Bem-vindo ao TaskForge',
         messages: {
           create: {
             role: 'ASSISTANT',
-            content: 'Olá! Sou seu assistente de produtividade. Pelo que posso ajudar hoje? Você pode pedir para eu criar tarefas, gerenciar projetos, etc.',
+            content: 'Olá! Sou seu assistente de produtividade TaskForge. Pelo que posso ajudar hoje? Você pode pedir para eu criar tarefas, gerenciar projetos, etc.',
           }
         }
       }

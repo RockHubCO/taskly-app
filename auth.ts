@@ -1,13 +1,12 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
-  adapter: PrismaAdapter(prisma),
+  // Credentials + JWT não precisa de PrismaAdapter
   providers: [
     Credentials({
       name: "Credentials",
@@ -24,12 +23,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { email: credentials.email as string }
         });
 
-        if (!user) {
+        if (!user || !user.passwordHash) {
           throw new Error("User not found");
-        }
-        
-        if (!user.passwordHash) {
-          throw new Error("User has no password");
         }
 
         const passwordsMatch = await bcrypt.compare(
@@ -41,7 +36,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           throw new Error("Invalid password");
         }
 
-        return user;
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        };
       }
     })
   ],

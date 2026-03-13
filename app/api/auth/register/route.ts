@@ -22,7 +22,7 @@ export async function POST(req: Request) {
         name,
         email,
         passwordHash,
-        role: "ADMIN", // Defaulting to ADMIN for testing
+        role: "MEMBER", // Default seguro — promover para ADMIN manualmente
       },
     });
 
